@@ -1,5 +1,13 @@
 import { Typegoose, prop } from "typegoose";
 
+class personPermissionSchema extends Typegoose {
+  @prop()
+  public canOtherSeeMyProfilePicture?: boolean;
+
+  @prop()
+  public canOtherAddMeToACommunicate?: boolean;
+}
+
 class user extends Typegoose {
   @prop()
   public _id!: string;
@@ -27,14 +35,9 @@ class user extends Typegoose {
 
   @prop()
   public permissions?: personPermissionSchema;
-}
-
-class personPermissionSchema extends Typegoose {
-  @prop()
-  public canOtherSeeMyProfilePicture?: boolean;
 
   @prop()
-  public canOtherAddMeToACommunicate?: boolean;
+  public profileImages?: string[];
 }
 
 class lastUpdateSchema extends Typegoose {
@@ -78,6 +81,8 @@ class chanelSchema extends Typegoose {
   public owner!: string;
 }
 
+class groupePermissionsSchema extends Typegoose {}
+
 class groupeSchema extends Typegoose {
   @prop()
   public _id!: string;
@@ -97,8 +102,6 @@ class groupeSchema extends Typegoose {
   @prop()
   public permissions?: groupePermissionsSchema;
 }
-
-class groupePermissionsSchema extends Typegoose {}
 
 class messageSchema extends Typegoose {
   @prop()

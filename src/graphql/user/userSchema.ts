@@ -1,6 +1,6 @@
 import { GraphQLObjectType, GraphQLString } from "graphql";
 
-const user = new GraphQLObjectType({
+export const user = new GraphQLObjectType({
   name: "user",
   fields: {
     error:{type:GraphQLString},
