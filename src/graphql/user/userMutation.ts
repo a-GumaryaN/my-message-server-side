@@ -10,6 +10,7 @@ import { userInfo } from "../..";
 import { create_verify_hash, check_verify_hash } from "../../modules/verify_hash";
 import code_generator from "../../modules/code_generator";
 import send_email from "../../modules/send_email/send_email";
+import { verifyCode } from "../../db/models";
 
 
 const verify_hash = new GraphQLObjectType({
@@ -21,7 +22,7 @@ const verify_hash = new GraphQLObjectType({
 });
 
 export const userMutation = {
-  Register_1: {
+  setVerifyCode: {
     type: verify_hash,
     args: {
       email: { type: GraphQLString }
@@ -35,33 +36,74 @@ export const userMutation = {
       //step 2 => check data base for found an user with input username
       try {
 
-        const checkNotExist = await userModel.findOne({ _id });
+        const checkNotExist = await verifyCode.findOne({ _id });
         // step 2 ===> if user founded server will rejected an error...
-        if (checkNotExist) throw "you are registered later";
+        if (checkNotExist) throw "you are register later";
 
       } catch (error) {
         return { error };
       }
 
-      //step 3 => server send an email to input email for validate
-
       //generate a 6 character random code :
       const code = code_generator(6);
 
-      send_email({
-        getter: _id,
-        title: "verify code",
-        code
-      });
+      //set a verify code in database:
+      try {
 
-      const verify_hash = create_verify_hash({ email: _id, code });
+        const newVerifyCode = new verifyCode({
+          _id,
+          code
+        });
+
+        await newVerifyCode.save();
+
+      } catch (error) {
+        return { error };
+      }
+
+      //...send email part
+
+      // send_email({
+      //   getter: _id,
+      //   title: "verify code",
+      //   code
+      // });
 
       return { error: null, verify_hash }
 
     },
   },
+  checkVerifyCode: {
+    type: new GraphQLObjectType({
+      name: "verify_code",
+      fields: {
+        error: { type: GraphQLString }
+      }
+    }),
+    args: {
+      email: { type: GraphQLString },
+      code: { type: GraphQLString },
+    },
+    resolve: async (parent: any, args: any) => {
+      const _id = removeTags(args.email),
+        code = removeTags(args.code);
+      try {
 
-  Register_2: {
+        const checkExist = await verifyCode.findOne({ _id });
+        // step 2 ===> if user founded server will rejected an error...
+        if (!checkExist) throw "code not set";
+
+        if (code !== checkExist.code) throw 'your code not valid';
+
+        return {}
+
+      } catch (error) {
+        return { error };
+      }
+    }
+  },
+
+  Register: {
     type: userLogin,
     args: {
       email: { type: GraphQLString },
@@ -74,25 +116,21 @@ export const userMutation = {
 
       //sanitize input data's :
       const _id = removeTags(args.email),
-        password = removeTags(args.password),
+        password = hashMaker(removeTags(args.password), 'md5', 'utf-8', 'hex'),
         code = removeTags(args.code),
-        input_verify_hash = removeTags(args.verify_hash),
         fullName = removeTags(args.fullName);
 
-      //verify code an email width verify_hash
+      try {
 
-      const verify_hash_result = check_verify_hash({
-        email: _id,
-        code,
-        input_verify_hash
-      });
+        const checkExist = await verifyCode.findOne({ _id });
+        // step 2 ===> if user founded server will rejected an error...
+        if (!checkExist) throw "code not set";
 
-      //reject error if verify_hash and generated hash has conflict
+        if (code !== checkExist.code) throw 'your code not valid';
 
-      if (!verify_hash_result) return { error: 'your code not valid' }
-
-      //create a user in database
-
+      } catch (error) {
+        return { error };
+      }
 
       const checkNotExist = await userModel.findOne({ _id });
       //create user if not created later...
@@ -112,7 +150,7 @@ export const userMutation = {
 
       //create token
 
-      const token = sign({ _id }, secret);
+      const token = sign({ _id, fullName }, secret);
 
       //return token
 

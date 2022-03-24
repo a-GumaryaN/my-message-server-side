@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { connect } from "mongoose";
 // import { Server } from "socket.io";
 // import { socket } from "./api/socket-module";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import * as fs from "fs-extra";
 import { join } from "path";
 import { auth } from "./modules/auth";
@@ -13,6 +13,7 @@ import { secret } from "./modules/modules";
 import removeTags from "./modules/XSS";
 import { graphqlHTTP } from "express-graphql";
 import graphqlSchema from "./graphql/graphql";
+import { userInfo } from ".";
 const cors = require("cors");
 
 class server {
@@ -50,6 +51,7 @@ class server {
       console.log(`successfully connected to the database...`);
     });
 
+    //route for authentication with client's jwt
     this.app.use("", (req: any, res: any, next: Function) => {
       const inputToken: any = req.headers.token;
 
@@ -77,15 +79,12 @@ class server {
       next();
     });
 
-    this.app.get('/test', (req: any, res: any) => {
-      res.sendFile(__dirname + "/test.html");
-    })
 
+    //upload files route
     this.app.post("/upload", (req: any, res: any) => {
       //authentication
 
       if (!this.userInfo.username) {
-        console.log('errror in authentication')
         res.status(403);
         res.send("access denied to upload file");
       }
@@ -97,15 +96,15 @@ class server {
 
       req.busboy.on(
         "file",
-        function (fieldName: string, File: any, {filename}:any) {
-          console.log("Uploading: "+filename);
+        function (fieldName: string, File: any, { filename }: any) {
+          console.log("Uploading: " + filename);
 
           //Path where image will be uploaded
           const fstream = fs.createWriteStream(
-            join(__dirname, "uploads",'users', filename)
+            join(__dirname, "uploads", 'users', userInfo.username, filename)
           );
           console.log(filename);
-          console.log('filename type ======>  '+typeof(filename))
+          console.log('filename type ======>  ' + typeof (filename))
           File.pipe(fstream);
           fstream.on("close", function () {
             console.log("Upload Finished of " + filename);
@@ -114,6 +113,19 @@ class server {
           });
         }
       );
+    });
+
+
+    //CDN part
+    this.app.get('/profile_image/:username/:filename', (req: any, res: any) => {
+      const username = req.param('username');
+      const filename = req.param("filename");
+      const path = join(__dirname, "uploads", 'users', username, filename);
+      if (!existsSync(path)) {
+        res.status(404);
+        res.send("file not exist");
+      }
+      res.sendFile(path);
     });
 
     this.app.use(

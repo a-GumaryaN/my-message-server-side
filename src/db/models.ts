@@ -1,4 +1,14 @@
+import { Schema, model } from "mongoose";
 import { Typegoose, prop } from "typegoose";
+
+const verifyCodeSchema = new Schema({
+  _id: { type: String, require: true },
+  code: { type: String, require: true },
+},{ timestamps: false });
+
+// verifyCodeSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7200 });
+
+export const verifyCode = model('verifyCode', verifyCodeSchema);
 
 class personPermissionSchema extends Typegoose {
   @prop()
@@ -81,7 +91,7 @@ class chanelSchema extends Typegoose {
   public owner!: string;
 }
 
-class groupePermissionsSchema extends Typegoose {}
+class groupePermissionsSchema extends Typegoose { }
 
 class groupeSchema extends Typegoose {
   @prop()
