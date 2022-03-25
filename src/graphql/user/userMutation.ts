@@ -1,5 +1,5 @@
 import { GraphQLObjectType, GraphQLString } from "graphql";
-import { userLogin } from "./userSchema";
+import { user, userLogin, inputUser } from "./userSchema";
 import { sign } from "jsonwebtoken";
 import removeTags from "../../modules/XSS";
 import hashMaker from "../../modules/modules";
@@ -7,7 +7,6 @@ import { userModel } from "../../db/models";
 import { secret } from "../../modules/modules";
 import create_file from "../../modules/create_file";
 import { userInfo } from "../..";
-import { create_verify_hash, check_verify_hash } from "../../modules/verify_hash";
 import code_generator from "../../modules/code_generator";
 import send_email from "../../modules/send_email/send_email";
 import { verifyCode } from "../../db/models";
@@ -155,6 +154,34 @@ export const userMutation = {
       //return token
 
       return { user: result, token };
+
+    }
+  },
+  updateUser: {
+    type: user,
+    args: {
+      user: { type: inputUser }
+    },
+    resolve: async (parent: any, args: any) => {
+
+      if (!userInfo.username) return { error: 'access denied' }
+
+      const _id = userInfo.username;
+      
+      const user = args.user;
+
+      try {
+        await userModel.updateOne({ _id }, user);
+
+        const result = await userModel.findById({ _id });
+
+        return { result }
+
+      } catch ({ message }) {
+
+        return { error: message }
+
+      }
 
     }
   }

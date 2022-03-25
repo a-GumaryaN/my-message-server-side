@@ -47,7 +47,7 @@ class user extends Typegoose {
   public permissions?: personPermissionSchema;
 
   @prop()
-  public profileImages?: string[];
+  public profileImage?: string;
 }
 
 class lastUpdateSchema extends Typegoose {
