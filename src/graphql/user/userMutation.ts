@@ -1,4 +1,4 @@
-import { GraphQLObjectType, GraphQLString } from "graphql";
+import { GraphQLBoolean, GraphQLObjectType, GraphQLString } from "graphql";
 import { user, userLogin, inputUser } from "./userSchema";
 import { sign } from "jsonwebtoken";
 import removeTags from "../../modules/XSS";
@@ -11,44 +11,23 @@ import code_generator from "../../modules/code_generator";
 import send_email from "../../modules/send_email/send_email";
 import { verifyCode } from "../../db/models";
 import { result } from "../dependencies";
-import {
-  checkVerifyCodeSchema,
-  resetPasswordSchema,
-  RegisterSchema,
-  VerifyCodeSchema,
-  updateUserSchema
-} from "../../schemas/joi.schemas";
-
+import { getGmailSchema, getCodeSchema, FinalRegisterSchema, updateSchema } from "../../schemas/joi.schemas";
 
 export const userMutation = {
-  //resolver for send verify code to new user email 
-  setVerifyCode: {
+
+  GetEmail: {
     type: result,
     args: {
       email: { type: GraphQLString }
     },
     resolve: async (parent: any, args: any) => {
+      //validate email
+      const { value, error } = getGmailSchema.validate({ email: args.email });
 
-      //sanitize the input data :
+      if (error) return { error: error.details[0].message }
 
-      const _id = removeTags(args.email);
-
-      //validate input data content :
-
-      const validate = VerifyCodeSchema.validate({ email: _id });
-
-      if (validate.error) return { error: validate.error.details[0].message }
-
-      //check data base for found an user with input username
-      try {
-
-        const checkNotExist = await userModel.findOne({ _id });
-        //if user founded server will rejected an error => user register before
-        if (checkNotExist) throw "you are register later";
-
-      } catch (error) {
-        return { error };
-      }
+      //getting email from client
+      const _id = removeTags(value.email);
 
       //generate a 6 character random code :
       const code = code_generator(6);
@@ -56,147 +35,104 @@ export const userMutation = {
       //set a verify code in database:
       try {
 
-        //check verifyCode collection for find a user with _id:_id
-
-        const checkCodeForUserExist = await verifyCode.findOne({ _id });
-
-        //if for user send an email last :
-        if (checkCodeForUserExist) {
-          //set a new validate code with new expire date in database :
-          await verifyCode.deleteOne({ _id });
-          const newVerifyCode = new verifyCode({
-            _id,
-            code
-          });
-          await newVerifyCode.save();
-        } else {
-          //set a new verify code only
-          const newVerifyCode = new verifyCode({
-            _id,
-            code
-          });
-          await newVerifyCode.save();
-        }
-
-      } catch (error) {
-        return { error };
-      }
-
-      //...send email part
-
-      // send_email({
-      //   getter: _id,
-      //   title: "verify code",
-      //   code
-      // });
-
-      return { error: null, result: 'code sended' }
-
-    },
-  },
-
-  //resolver for send verify code to old user email that forgot password
-  setForgotEmailCode: {
-    type: result,
-    args: {
-      email: { type: GraphQLString }
-    },
-    resolve: async (parent: any, args: any) => {
-
-      //sanitize the input data
-
-      const _id = removeTags(args.email);
-
-      //validate input data content :
-
-      const validate = VerifyCodeSchema.validate({ email: _id });
-
-      if (validate.error) return { error: validate.error.message }
-
-      //check data base for found an user with input username
-      try {
-
-        const checkNotExist = await userModel.findOne({ _id });
-        //if user founded server will rejected an error => user register before
-        if (!checkNotExist) throw "you not register";
-
-      } catch (error) {
-        return { error };
-      }
-
-      //generate a 6 character random code :
-      const code = code_generator(6);
-
-      //set a verify code in database:
-      try {
-
+        //check code set before
         const checkCodeForUserExist = await verifyCode.findOne({ _id });
 
         if (checkCodeForUserExist) {
+          //if code exist in data base:
+          //delete last code and send a new code
           await verifyCode.deleteOne({ _id });
+          console.log('last code deleted...');
+
+
           const newVerifyCode = new verifyCode({
             _id,
             code
           });
           await newVerifyCode.save();
+          console.log('new code saved')
         } else {
+          //if code not exist in data base:
+          //set code in database and send the code
           const newVerifyCode = new verifyCode({
             _id,
             code
           });
           await newVerifyCode.save();
+          console.log('new code saved')
         }
+
+        return { result: 'code send to your email' }
 
       } catch (error) {
         return { error };
       }
 
-      //...send email part
+      //send code to email
+      //... send code part
 
-      // send_email({
-      //   getter: _id,
-      //   title: "verify code",
-      //   code
-      // });
-
-      return { error: null, result: 'code sended' }
-
-    },
+    }
   },
 
-  //resolver for checking user verify code that emailed
-  checkVerifyCode: {
-    type: result,
+  GetCode: {
+    type: new GraphQLObjectType({
+      name: 'GetCodeOutput',
+      fields: {
+        error: { type: GraphQLString },
+        userExist: { type: GraphQLBoolean },
+        userLogin: { type: userLogin },
+      }
+    }),
     args: {
       email: { type: GraphQLString },
       code: { type: GraphQLString },
     },
     resolve: async (parent: any, args: any) => {
 
-      //sanitize the input data
-      const _id = removeTags(args.email),
-        code = removeTags(args.code);
 
-      //validate input data content :
+      //validate input data
 
-      const validate = checkVerifyCodeSchema.validate({ email: _id, code });
+      const { error, value } = getCodeSchema.validate({
+        email: args.email,
+        code: args.code
+      });
 
-      if (validate.error) return { error: validate.error.details[0].message }
+      if (error) return { error: error.details[0].message }
 
 
-      //find code in data base with _id=_id
+      //getting email from client
+      const _id = removeTags(value.email),
+        code = removeTags(value.code);
+
+
+      //check data base for validate code
       try {
-
         const checkExist = await verifyCode.findOne({ _id });
 
-        //if user not founded server will rejected an error => user not set any code
-        if (!checkExist) throw "you not set any code";
+        //if user founded server will rejected not user found error
+        if (!checkExist) throw "code not set";
 
-
-        //if code not equal with user code server => code not valid
+        //if code not valid reject not valid error
         if (code !== checkExist.code) throw 'your code not valid';
 
-        return { result: 'code valid' }
+        //check data base for user
+        const checkUserInDatabase = await userModel.findOne({ _id });
+
+        //if user found then send unsensitive user information to client
+
+        if (checkUserInDatabase) {
+          //generate token
+          const token = sign({ _id, fullName: checkUserInDatabase.fullName }, secret);
+          //return user information for login
+          return {
+            error: null, userExist: true, userLogin: {
+              token,
+              user: checkUserInDatabase
+            }
+          }
+        }
+
+        return { error: null, userExist: false, user: null }
 
       } catch (error) {
         return { error };
@@ -204,105 +140,70 @@ export const userMutation = {
     }
   },
 
-  //resolver for reset password
-  resetPassword: {
-    type: result,
-    args: {
-      email: { type: GraphQLString },
-      password: { type: GraphQLString },
-      code: { type: GraphQLString },
-    },
-    resolve: async (parent: any, args: any) => {
-
-      //sanitize the input data
-      const _id = removeTags(args.email),
-        code = removeTags(args.code),
-        password = hashMaker(removeTags(args.password), 'md5', 'utf-8', 'hex');
-
-      //validate input data content :
-      const validate = resetPasswordSchema.validate({ email: _id, code, password });
-
-      if (validate.error) return { error: validate.error.details[0].message }
-
-
-
-      try {
-
-        const checkCode = await verifyCode.findOne({ _id });
-
-        if (!checkCode) return { error: 'code not set' }
-
-        if (checkCode.code !== code) return { error: "code not valid" }
-
-
-        const passwordUpdateResult = await userModel.updateOne({ _id }, { password });
-
-        if (passwordUpdateResult.ok) return { error: null, result: 'password updated...' }
-
-        return { error: "error in update data , try again" }
-
-      } catch (error) {
-        return { error };
-      }
-    }
-  },
-
-  //resolver for register
-  Register: {
+  FinalRegister: {
     type: userLogin,
     args: {
       email: { type: GraphQLString },
-      password: { type: GraphQLString },
       code: { type: GraphQLString },
-      fullName: { type: GraphQLString },
+      inputUser: { type: inputUser }
     },
     resolve: async (parent: any, args: any) => {
 
-      //sanitize input data's :
-      const _id = removeTags(args.email),
-        password = hashMaker(removeTags(args.password), 'md5', 'utf-8', 'hex'),
-        code = removeTags(args.code),
-        fullName = removeTags(args.fullName);
 
-      //validate input data content :
-      const validate: any = RegisterSchema.validate({ email: _id, code, password, fullName });
+      const { value, error } = FinalRegisterSchema.validate({
+        email: args.email,
+        code: args.code,
+        inputUser: args.inputUser
+      });
 
-
-      if (validate.error) return { error: validate.error.details[0].message }
+      if (error) return { error: error.details[0].message }
 
 
+      //getting email from client
+      const _id = removeTags(value.email),
+        code = removeTags(value.code),
+        password = hashMaker(removeTags(value.inputUser.password), 'md5', 'utf-8', 'hex'),
+        fullName = removeTags(value.inputUser.fullName);
+
+        
+
+      //check data base for validate code
       try {
-
         const checkExist = await verifyCode.findOne({ _id });
-        //if user founded server will rejected an error...
+
+        //if user founded server will rejected not user found error
         if (!checkExist) throw "code not set";
 
+        //if code not valid reject not valid error
         if (code !== checkExist.code) throw 'your code not valid';
+
+        //check data base for user
+        const checkUserInDatabase = await userModel.findOne({ _id });
+
+        //if user found reject error
+        if (checkUserInDatabase) return { error: 'you are register later' }
 
         const newUser = new userModel({
           _id,
-          password,
           fullName,
+          password
         });
+
         const registerResult = await newUser.save();
 
-        console.log(registerResult);
 
-        //create a folder with user.json file within
-
+        //create folder for new user
         create_file({ _id });
 
-        //create token
-
+        //generate token
         const token = sign({ _id, fullName }, secret);
+        //return user information for login
+        return {
+          error: null,
+          token,
+          user: registerResult
+        }
 
-        //return token
-
-        //delete code in verify code collection
-
-        await verifyCode.deleteOne({ _id });
-
-        return { user: registerResult, token };
 
       } catch (error) {
         return { error };
@@ -313,7 +214,7 @@ export const userMutation = {
 
   //resolver for update user:
   updateUser: {
-    type: user,
+    type: result,
     args: {
       user: { type: inputUser }
     },
@@ -321,15 +222,16 @@ export const userMutation = {
 
       if (!userInfo.username) return { error: 'access denied' }
 
+
+      const { error, value } = updateSchema.validate({ user: args.user });
+
+      if (error) return { error:error.details[0].message }
+
+
       const _id = userInfo.username;
 
-      const user = args.user;
+      const user = value.user;
 
-      //sanitize input user data
-
-      // const validate = updateUserSchema.validate(user);
-
-      // if (validate.error) return { error: validate.error.details[0].message }
 
       try {
         await userModel.updateOne({ _id }, user);
@@ -344,5 +246,6 @@ export const userMutation = {
 
       }
     }
-  }
+  },
+
 };
